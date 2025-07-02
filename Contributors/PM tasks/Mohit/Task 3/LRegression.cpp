@@ -4,7 +4,6 @@
 #include <string>
 #include <vector>
 #include <set>
-#include <map>
 #include <cmath>
 #include <algorithm>
 #include <random>
@@ -21,6 +20,7 @@ using namespace std;
 
 struct datapoint {
     float fare_amount;
+
     string pickup_datetime;
     double pickup_longitude, pickup_latitude;
     double dropoff_longitude, dropoff_latitude;
@@ -50,13 +50,14 @@ VectorXd t_stat(MatrixXd &X, VectorXd &y, VectorXd &beta);
 pair<vector<int>, vector<double>> forward_selection(const MatrixXd &X_full, const VectorXd &y, int max_features = -1);
 ModelMetrics compute_metrics(const MatrixXd &X, const VectorXd &y, const VectorXd &beta, double sigma2_full_model);
 double AIC(const MatrixXd &X, const VectorXd &y);
+pair<vector<int>, vector<double>> threaded_forward_selection(const MatrixXd &X_full, const VectorXd &y, int max_features = -1);
 
 int main() {
     auto start = chrono::high_resolution_clock::now();
     const string filepath = "uber.csv";
 
     vector<datapoint> data = load_csv(filepath);
-    shuffle(data.begin(), data.end(), default_random_engine(0));
+    shuffle(data.begin(), data.end(), default_random_engine(42));
 
     size_t N = data.size(); int p = 10;
     MatrixXd X(N, p+1);
@@ -82,7 +83,11 @@ int main() {
     X.col(10) = X.col(4).array() * X.col(1).array(); // dist^3
 
     // Performing forward selection
-    pair<vector<int>, vector<double>> selection = forward_selection(X, y);
+    // pair<vector<int>, vector<double>> selection = forward_selection(X, y);
+    // vector<int> selection_order = selection.first;
+    // vector<double> ordered_AIC = selection.second;
+
+    pair<vector<int>, vector<double>> selection = threaded_forward_selection(X, y);
     vector<int> selection_order = selection.first;
     vector<double> ordered_AIC = selection.second;
 
@@ -114,7 +119,7 @@ int main() {
     // double lambda = 10.0;
     // VectorXd betaRidge = (X_train.transpose() * X_train + lambda * I).inverse() * (X_train.transpose() * y_train);
 
-    cout << "R2 score: " << R2_score(X_test, y_test, betaOLS) << '\n';
+    cout << "R2 score: " << R2_score(X_test, y_test, betaOLS) << '\n'; // 0.799
     cout << t_stat(X_train, y_train, betaOLS) << '\n';
 
     // MatrixXd X_unselected(N, 4);
@@ -180,7 +185,7 @@ vector<datapoint> load_csv(const string &filepath, const bool header) {
             point.passenger_count = stoi(field);
 
             // great-circle distance
-            point.hav_dist = haversine_distance(point);
+            point.hav_dist = haversine_distance(point); 
 
             if (point.hav_dist < 0.1 || point.hav_dist > 100) continue; // nearly 7000
             if (point.passenger_count <= 0 || point.passenger_count > 6) continue; // nearly 600
@@ -244,14 +249,14 @@ double R2_score(MatrixXd &X, VectorXd &y, VectorXd &beta) {
 }
 double RSE(MatrixXd &X, VectorXd &y, VectorXd &beta) {
     int N = X.rows();
-
+    int p = X.cols() - 1;
     VectorXd y_pred = X * beta;
     VectorXd y_mean_vec = VectorXd::Constant(y.rows(), y.mean());
 
     VectorXd e = y - y_pred;
 
     double RSS = e.squaredNorm();
-    double RSE = sqrt(RSS/(N-2));
+    double RSE = sqrt(RSS/(N-p-1));
 
     return RSE;
 }
@@ -269,7 +274,7 @@ VectorXd t_stat(MatrixXd &X, VectorXd &y, VectorXd &beta) {
     VectorXd t_stats(p + 1);
     for (int j = 0; j <= p; ++j) {
         double se = sqrt(cov_beta(j, j));
-        t_stats(j) = beta(j) / se;
+        t_stats(j) = (beta(j) - 0) / se;
     }
 
     return t_stats;
@@ -286,13 +291,15 @@ pair<vector<int>, vector<double>> threaded_forward_selection(const MatrixXd &X_f
 
     while (!remaining.empty() && (max_features == -1 || selected.size() < max_features)) {
         int best_feature = -1;
-        double best_candidate_AIC = numeric_limits<double>::max();
+        double best_candidate_rss = numeric_limits<double>::max();
+        double corresponding_AIC = numeric_limits<double>::max();
 
         vector<int> remaining_vec(remaining.begin(), remaining.end());
         int num_candidates = remaining_vec.size();
 
         vector<int> thread_best_feature(omp_get_max_threads(), -1);
-        vector<double> thread_best_AIC(omp_get_max_threads(), numeric_limits<double>::max());
+        vector<double> thread_best_rss(omp_get_max_threads(), numeric_limits<double>::max());
+        vector<double> thread_AIC(omp_get_max_threads(), numeric_limits<double>::max());
 
         #pragma omp parallel for
         for (int i = 0; i < num_candidates; ++i) {
@@ -305,24 +312,26 @@ pair<vector<int>, vector<double>> threaded_forward_selection(const MatrixXd &X_f
             for (int j = 0; j < candidate.size(); ++j) {
                 X_candidate.col(j + 1) = X_full.col(candidate[j]);
             }
-            double aic = AIC(X_candidate, y);
+            double rss = RSS(X_candidate, y);
 
             int thread_id = omp_get_thread_num();
-            if (aic < thread_best_AIC[thread_id]) {
-                thread_best_AIC[thread_id] = aic;
+            if (rss < thread_best_rss[thread_id]) {
+                thread_best_rss[thread_id] = rss;
                 thread_best_feature[thread_id] = feature;
+                thread_AIC[thread_id] = AIC(X_candidate, y);
             }
         }
 
-        for (int i = 0; i < thread_best_AIC.size(); ++i) {
-            if (thread_best_AIC[i] < best_candidate_AIC) {
-                best_candidate_AIC = thread_best_AIC[i];
+        for (int i = 0; i < thread_best_rss.size(); ++i) {
+            if (thread_best_rss[i] < best_candidate_rss) {
+                best_candidate_rss = thread_best_rss[i];
+                corresponding_AIC = thread_AIC[i];
                 best_feature = thread_best_feature[i];
             }
         }
 
         selected_order.push_back(best_feature);
-        AIC_in_same_order.push_back(best_candidate_AIC);
+        AIC_in_same_order.push_back(corresponding_AIC);
         selected.insert(best_feature);
         remaining.erase(best_feature);
     }
