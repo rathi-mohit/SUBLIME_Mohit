@@ -28,19 +28,20 @@ struct df // A structure to hold vectors columns
     vector<int> index;
     vector<string> key;
     vector<double> fare_amount;
-    vector<double> pickup_datetime;
+    vector<double> pickup_datetime; // just time in hrs
     vector<double> pickup_longitude;
     vector<double> pickup_latitude;
     vector<double> dropoff_longitude;
     vector<double> dropoff_latitude;
     vector<double> passenger_count;
     vector<double> ride_distance;
-    vector<double> pickup_date;
+    vector<double> pickup_date; // day of month (eg 13th)
 
-    df() = default;
+    df() = default; // initialize
 };
 
 // Referencing columns by strings
+// dictionary in Py
 unordered_map<string, function<vector<double>(const df & ) >> create_feature_map()
 {
     return
@@ -173,7 +174,16 @@ VectorXd linear_regression_svd(const MatrixXd& X, const VectorXd& y) {
 double calc_r2(const VectorXd& y, const VectorXd & yhat)
 {
     int n = y.size();
-    double rss = (y - yhat).squaredNorm();
+    double rss = (y - yhat).squaredNorm(); // .square().sum()
+    double tss = (y.array() - y.mean()).square().sum();
+    double r2 = 1 - rss/tss;
+    return r2;
+}
+
+double calc_r2(const VectorXd& y, const VectorXd & yhat)
+{
+    int n = y.size();
+    double rss = (y - yhat).squaredNorm(); // .square().sum()
     double tss = (y.array() - y.mean()).square().sum();
     double r2 = 1 - rss/tss;
     return r2;
@@ -214,7 +224,7 @@ vector<string> fwd_selection(const df & data, const vector<string>& candidate_fe
     int n = Y.size();
     VectorXd y = Map<VectorXd>(Y.data(), n);
     
-    unordered_map<string, VectorXd> norm_features;
+    unordered_map<string, VectorXd> norm_features; // x1, x2, ...; x'_i = (x_i - mu)/sigma
     for (const string & feat : candidate_features)
     {
         if (feat == "passenger_count")
@@ -226,29 +236,31 @@ vector<string> fwd_selection(const df & data, const vector<string>& candidate_fe
         else
         {
             vector<double> v = feature_map[feat](data);
-            VectorXd V = Map<VectorXd>(v.data(), v.size());
+            VectorXd V = Map<VectorXd>(v.data(), v.size()); // Eigen form of v
             norm_features[feat] = V.normalized();
         }
     }
 
-    vector<string> selected;
-    double best_r2 = -1e5;
+    vector<string> selected; // vector of selected features
+    double best_r2 = -1e5; // -inf
     vector<string> best_features;
 
-    for (int s = 0; s < max_features; s++)
+    for (int s = 0; s < max_features; s++) // adding features from 0 to max_feature
     {
-        string best_feature;
+        string best_feature; // best among p-k for adding to M_k; 0.04
         double temp_r2 = best_r2;
         VectorXd best_beta;
 
-        for (const string& candidate : candidate_features)
+        for (const string & candidate : candidate_features) // iterating over features (we'll choose one)
         {
             if (find(selected.begin(), selected.end(), candidate) != selected.end())
                 continue;
-
+            
+            // construct a matrix X -> data matrix. c features
+            // + 1 feature, + 1 feature (beta_0 term)
             int c = selected.size() + 1; // +1 for adding feature
             MatrixXd X(n, c + 1); // +1 for beta_0
-            X.col(0) = VectorXd::Ones(n);
+            X.col(0) = VectorXd::Ones(n); // set everything in beta_0 column to 1
 
             // Add already selected features
             for (int i = 1; i < c; ++i)
@@ -260,19 +272,19 @@ vector<string> fwd_selection(const df & data, const vector<string>& candidate_fe
             X.col(c) = norm_features[candidate];
 
             VectorXd beta = linear_regression_svd(X, y);
-            VectorXd yhat = X*beta;
+            VectorXd yhat = X*beta; // predictions
 
-            double r2 = calc_r2(y, yhat);
+            double r2 = calc_r2(y, yhat); // 0.041 // 0.05
 
             if (r2 > temp_r2)
             {
-                temp_r2 = r2;
+                temp_r2 = r2; // 0.041 // 0.05
                 best_feature = candidate;
                 best_beta = beta;
             }
         }
 
-        if (temp_r2 > best_r2)
+        if (temp_r2 > best_r2*1.0)
         {
             best_r2 = temp_r2;
             selected.push_back(best_feature);
