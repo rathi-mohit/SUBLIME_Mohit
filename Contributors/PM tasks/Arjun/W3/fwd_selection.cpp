@@ -78,7 +78,7 @@ double coords_to_dist(const double & lat1, const double & lon1, const double & l
     double dlat = (lat2 - lat1)*pi/180;
     double dlon = (lon2 - lon1)*pi/180;
     double a = sin(dlat/2)*sin(dlat/2) + cos(lat1*pi/180)*cos(lat2*pi/180)*sin(dlon/2)*sin(dlon/2);
-    double d = 2*atan2(sqrt(a), sqrt(1-a));
+    double d = 2*sqrt(a);
     return d;
 }
 
@@ -154,7 +154,8 @@ df readCSV(const string & filename)
             data.ride_distance.push_back(distance);
             data.pickup_date.push_back(date);
         }
-        catch (...) {
+        catch (...)
+        {
             cout << "L. " << line << endl;
             continue;
         }
@@ -162,7 +163,7 @@ df readCSV(const string & filename)
     return data;
 }
 
-// Linear regression using Eigen with SVD
+// Linear regression using Eigen
 VectorXd linear_regression_svd(const MatrixXd& X, const VectorXd& y) {
     auto XT = X.transpose();
     auto beta = (XT*X).inverse()*XT*y;
@@ -231,7 +232,7 @@ vector<string> fwd_selection(const df & data, const vector<string>& candidate_fe
     }
 
     vector<string> selected;
-    double best_r2 = -1e9;
+    double best_r2 = -1e5;
     vector<string> best_features;
 
     for (int s = 0; s < max_features; s++)
@@ -246,10 +247,10 @@ vector<string> fwd_selection(const df & data, const vector<string>& candidate_fe
                 continue;
 
             int c = selected.size() + 1; // +1 for adding feature
-            MatrixXd X(n, c + 1); // +1 for intercept term
+            MatrixXd X(n, c + 1); // +1 for beta_0
             X.col(0) = VectorXd::Ones(n);
 
-            // Add selected features
+            // Add already selected features
             for (int i = 1; i < c; ++i)
             {
                 X.col(i) = norm_features[selected[i-1]];
@@ -258,14 +259,13 @@ vector<string> fwd_selection(const df & data, const vector<string>& candidate_fe
             // Add candidate feature
             X.col(c) = norm_features[candidate];
 
-            // Solve with SVD
             VectorXd beta = linear_regression_svd(X, y);
-            VectorXd y_pred = X*beta;
+            VectorXd yhat = X*beta;
 
-            double r2 = calc_r2(y, y_pred);
+            double r2 = calc_r2(y, yhat);
 
-            // Update best candidate
-            if (r2 > temp_r2) {
+            if (r2 > temp_r2)
+            {
                 temp_r2 = r2;
                 best_feature = candidate;
                 best_beta = beta;
