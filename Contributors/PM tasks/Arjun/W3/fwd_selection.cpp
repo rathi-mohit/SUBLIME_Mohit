@@ -16,6 +16,8 @@
 #include <Eigen/Dense>
 using namespace Eigen;
 
+#include <omp.h>
+
 using namespace std;
 
 // Definitions
@@ -28,20 +30,20 @@ struct df // A structure to hold vectors columns
     vector<int> index;
     vector<string> key;
     vector<double> fare_amount;
-    vector<double> pickup_datetime; // just time in hrs
+    vector<double> pickup_datetime;
     vector<double> pickup_longitude;
     vector<double> pickup_latitude;
     vector<double> dropoff_longitude;
     vector<double> dropoff_latitude;
     vector<double> passenger_count;
     vector<double> ride_distance;
-    vector<double> pickup_date; // day of month (eg 13th)
+    vector<double> pickup_date;
+    vector<double> distance_square;
 
-    df() = default; // initialize
+    df() = default;
 };
 
 // Referencing columns by strings
-// dictionary in Py
 unordered_map<string, function<vector<double>(const df & ) >> create_feature_map()
 {
     return
@@ -53,7 +55,8 @@ unordered_map<string, function<vector<double>(const df & ) >> create_feature_map
         {"dropoff_latitude", [](const df & d) { return d.dropoff_latitude; }},
         {"pickup_datetime", [](const df & d) { return d.pickup_datetime; }},
         {"ride_distance", [](const df & d) { return d.ride_distance; }},
-        {"pickup_date", [](const df & d) { return d.ride_distance; }}
+        {"pickup_date", [](const df & d) { return d.ride_distance; }},
+        {"distance_square", [](const df & d) { return d.distance_square; }}
     };
 }
 
@@ -79,7 +82,7 @@ double coords_to_dist(const double & lat1, const double & lon1, const double & l
     double dlat = (lat2 - lat1)*pi/180;
     double dlon = (lon2 - lon1)*pi/180;
     double a = sin(dlat/2)*sin(dlat/2) + cos(lat1*pi/180)*cos(lat2*pi/180)*sin(dlon/2)*sin(dlon/2);
-    double d = 2*sqrt(a);
+    double d = 2*atan2(sqrt(a), sqrt(1-a));
     return d;
 }
 
@@ -95,7 +98,8 @@ df readCSV(const string & filename)
 
     string line;
     getline(file, line);  // Skip header
-
+    
+    #pragma omp while
     while (getline(file, line)) {
         try {
             stringstream ss(line);
@@ -138,7 +142,7 @@ df readCSV(const string & filename)
             }
 
             double distance = coords_to_dist(pickup_latitude, pickup_longitude, dropoff_latitude, dropoff_longitude);
-            if (distance*6357 > 100 or distance*6357 < 0.1)
+            if (distance*6370 > 100 or distance*6370 < 0.1)
             {
                 continue;
             }
@@ -154,9 +158,9 @@ df readCSV(const string & filename)
             data.passenger_count.push_back(passenger_count);
             data.ride_distance.push_back(distance);
             data.pickup_date.push_back(date);
+            data.distance_square.push_back(distance*distance);
         }
-        catch (...)
-        {
+        catch (...) {
             cout << "L. " << line << endl;
             continue;
         }
@@ -164,26 +168,26 @@ df readCSV(const string & filename)
     return data;
 }
 
-// Linear regression using Eigen
-VectorXd linear_regression_svd(const MatrixXd& X, const VectorXd& y) {
+// Linear regression using Eigen with SVD
+VectorXd linear_regression(const MatrixXd& X, const VectorXd& y) {
     auto XT = X.transpose();
     auto beta = (XT*X).inverse()*XT*y;
     return beta;
 }
 
-double calc_r2(const VectorXd& y, const VectorXd & yhat)
+double calc_adj_r2(const VectorXd & y, const VectorXd & yhat, const double & p)
 {
     int n = y.size();
-    double rss = (y - yhat).squaredNorm(); // .square().sum()
+    double rss = (y - yhat).squaredNorm();
     double tss = (y.array() - y.mean()).square().sum();
-    double r2 = 1 - rss/tss;
-    return r2;
+    double adj_r2 = 1 - rss/(n-p-1)/(tss/(n-1));
+    return adj_r2;
 }
 
 double calc_r2(const VectorXd& y, const VectorXd & yhat)
 {
     int n = y.size();
-    double rss = (y - yhat).squaredNorm(); // .square().sum()
+    double rss = (y - yhat).squaredNorm();
     double tss = (y.array() - y.mean()).square().sum();
     double r2 = 1 - rss/tss;
     return r2;
@@ -224,7 +228,8 @@ vector<string> fwd_selection(const df & data, const vector<string>& candidate_fe
     int n = Y.size();
     VectorXd y = Map<VectorXd>(Y.data(), n);
     
-    unordered_map<string, VectorXd> norm_features; // x1, x2, ...; x'_i = (x_i - mu)/sigma
+    unordered_map<string, VectorXd> norm_features;
+
     for (const string & feat : candidate_features)
     {
         if (feat == "passenger_count")
@@ -236,33 +241,31 @@ vector<string> fwd_selection(const df & data, const vector<string>& candidate_fe
         else
         {
             vector<double> v = feature_map[feat](data);
-            VectorXd V = Map<VectorXd>(v.data(), v.size()); // Eigen form of v
+            VectorXd V = Map<VectorXd>(v.data(), v.size());
             norm_features[feat] = V.normalized();
         }
     }
 
-    vector<string> selected; // vector of selected features
-    double best_r2 = -1e5; // -inf
+    vector<string> selected;
+    double best_r2 = -1e9;
     vector<string> best_features;
 
-    for (int s = 0; s < max_features; s++) // adding features from 0 to max_feature
+    for (int s = 0; s < max_features; s++)
     {
-        string best_feature; // best among p-k for adding to M_k; 0.04
+        string best_feature;
         double temp_r2 = best_r2;
         VectorXd best_beta;
 
-        for (const string & candidate : candidate_features) // iterating over features (we'll choose one)
+        for (const string & candidate : candidate_features)
         {
             if (find(selected.begin(), selected.end(), candidate) != selected.end())
                 continue;
-            
-            // construct a matrix X -> data matrix. c features
-            // + 1 feature, + 1 feature (beta_0 term)
-            int c = selected.size() + 1; // +1 for adding feature
-            MatrixXd X(n, c + 1); // +1 for beta_0
-            X.col(0) = VectorXd::Ones(n); // set everything in beta_0 column to 1
 
-            // Add already selected features
+            int c = selected.size() + 1; // +1 for adding feature
+            MatrixXd X(n, c + 1); // +1 for intercept term
+            X.col(0) = VectorXd::Ones(n);
+
+            // Add selected features
             for (int i = 1; i < c; ++i)
             {
                 X.col(i) = norm_features[selected[i-1]];
@@ -271,20 +274,21 @@ vector<string> fwd_selection(const df & data, const vector<string>& candidate_fe
             // Add candidate feature
             X.col(c) = norm_features[candidate];
 
-            VectorXd beta = linear_regression_svd(X, y);
-            VectorXd yhat = X*beta; // predictions
+            // Solve with SVD
+            VectorXd beta = linear_regression(X, y);
+            VectorXd y_pred = X*beta;
 
-            double r2 = calc_r2(y, yhat); // 0.041 // 0.05
+            double r2 = calc_adj_r2(y, y_pred, c);
 
-            if (r2 > temp_r2)
-            {
-                temp_r2 = r2; // 0.041 // 0.05
+            // Update best candidate
+            if (r2 > temp_r2) {
+                temp_r2 = r2;
                 best_feature = candidate;
                 best_beta = beta;
             }
         }
 
-        if (temp_r2 > best_r2*1.0)
+        if (temp_r2 > best_r2)
         {
             best_r2 = temp_r2;
             selected.push_back(best_feature);
@@ -310,7 +314,7 @@ int main()
         return -1;
     }
 
-    vector<string> candidate_features = {"passenger_count", "ride_distance", "pickup_datetime", "pickup_date"};
+    vector<string> candidate_features = {"passenger_count", "ride_distance", "pickup_datetime", "pickup_date", "distance_square"};
     auto n = candidate_features.size();
     auto selected = fwd_selection(data, candidate_features, n);
     
