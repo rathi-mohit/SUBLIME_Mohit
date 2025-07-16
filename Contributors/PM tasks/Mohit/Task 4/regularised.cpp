@@ -246,7 +246,7 @@ VectorXd betaRidge(MatrixXd &X, VectorXd &y, double lambda, bool intercept) {
     if (intercept) {
         MatrixXd I = MatrixXd::Identity(X.cols(), X.cols()); I(0, 0) = 0;
         return (X.transpose() * X + lambda*I).ldlt().solve(X.transpose() * y);
-    }
+    } 
     else {
         MatrixXd X_with_intercept(X.rows(), X.cols()+1);
         X_with_intercept.col(0) = VectorXd::Constant(X.rows(), 1);
