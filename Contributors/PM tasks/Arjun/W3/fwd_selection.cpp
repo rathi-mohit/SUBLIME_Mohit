@@ -16,6 +16,8 @@
 #include <Eigen/Dense>
 using namespace Eigen;
 
+#include <omp.h>
+
 using namespace std;
 
 // Definitions
@@ -36,6 +38,7 @@ struct df // A structure to hold vectors columns
     vector<double> passenger_count;
     vector<double> ride_distance;
     vector<double> pickup_date;
+    vector<double> distance_square;
 
     df() = default;
 };
@@ -52,7 +55,8 @@ unordered_map<string, function<vector<double>(const df & ) >> create_feature_map
         {"dropoff_latitude", [](const df & d) { return d.dropoff_latitude; }},
         {"pickup_datetime", [](const df & d) { return d.pickup_datetime; }},
         {"ride_distance", [](const df & d) { return d.ride_distance; }},
-        {"pickup_date", [](const df & d) { return d.ride_distance; }}
+        {"pickup_date", [](const df & d) { return d.ride_distance; }},
+        {"distance_square", [](const df & d) { return d.distance_square; }}
     };
 }
 
@@ -94,7 +98,8 @@ df readCSV(const string & filename)
 
     string line;
     getline(file, line);  // Skip header
-
+    
+    #pragma omp while
     while (getline(file, line)) {
         try {
             stringstream ss(line);
@@ -137,7 +142,7 @@ df readCSV(const string & filename)
             }
 
             double distance = coords_to_dist(pickup_latitude, pickup_longitude, dropoff_latitude, dropoff_longitude);
-            if (distance*6357 > 100 or distance*6357 < 0.1)
+            if (distance*6370 > 100 or distance*6370 < 0.1)
             {
                 continue;
             }
@@ -153,6 +158,7 @@ df readCSV(const string & filename)
             data.passenger_count.push_back(passenger_count);
             data.ride_distance.push_back(distance);
             data.pickup_date.push_back(date);
+            data.distance_square.push_back(distance*distance);
         }
         catch (...) {
             cout << "L. " << line << endl;
@@ -163,10 +169,19 @@ df readCSV(const string & filename)
 }
 
 // Linear regression using Eigen with SVD
-VectorXd linear_regression_svd(const MatrixXd& X, const VectorXd& y) {
+VectorXd linear_regression(const MatrixXd& X, const VectorXd& y) {
     auto XT = X.transpose();
     auto beta = (XT*X).inverse()*XT*y;
     return beta;
+}
+
+double calc_adj_r2(const VectorXd & y, const VectorXd & yhat, const double & p)
+{
+    int n = y.size();
+    double rss = (y - yhat).squaredNorm();
+    double tss = (y.array() - y.mean()).square().sum();
+    double adj_r2 = 1 - rss/(n-p-1)/(tss/(n-1));
+    return adj_r2;
 }
 
 double calc_r2(const VectorXd& y, const VectorXd & yhat)
@@ -214,6 +229,7 @@ vector<string> fwd_selection(const df & data, const vector<string>& candidate_fe
     VectorXd y = Map<VectorXd>(Y.data(), n);
     
     unordered_map<string, VectorXd> norm_features;
+
     for (const string & feat : candidate_features)
     {
         if (feat == "passenger_count")
@@ -240,7 +256,7 @@ vector<string> fwd_selection(const df & data, const vector<string>& candidate_fe
         double temp_r2 = best_r2;
         VectorXd best_beta;
 
-        for (const string& candidate : candidate_features)
+        for (const string & candidate : candidate_features)
         {
             if (find(selected.begin(), selected.end(), candidate) != selected.end())
                 continue;
@@ -259,10 +275,10 @@ vector<string> fwd_selection(const df & data, const vector<string>& candidate_fe
             X.col(c) = norm_features[candidate];
 
             // Solve with SVD
-            VectorXd beta = linear_regression_svd(X, y);
+            VectorXd beta = linear_regression(X, y);
             VectorXd y_pred = X*beta;
 
-            double r2 = calc_r2(y, y_pred);
+            double r2 = calc_adj_r2(y, y_pred, c);
 
             // Update best candidate
             if (r2 > temp_r2) {
@@ -298,7 +314,7 @@ int main()
         return -1;
     }
 
-    vector<string> candidate_features = {"passenger_count", "ride_distance", "pickup_datetime", "pickup_date"};
+    vector<string> candidate_features = {"passenger_count", "ride_distance", "pickup_datetime", "pickup_date", "distance_square"};
     auto n = candidate_features.size();
     auto selected = fwd_selection(data, candidate_features, n);
     
