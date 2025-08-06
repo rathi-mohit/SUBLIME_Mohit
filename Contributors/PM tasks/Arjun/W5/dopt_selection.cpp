@@ -62,7 +62,7 @@ df readCSV(const string & filename)
         return data;
     }
     string line;
-    getline(file, line);
+    getline(file, line); // Header
     while (getline(file, line))
     {
         try
@@ -114,13 +114,14 @@ pair<MatrixXd, VectorXd> convert(df & dframe)
 {
     int n = dframe.date.size();
     VectorXd y = Map<VectorXd>(dframe.global_reactive_power.data(), n);
-    MatrixXd X(n, 8);
+    MatrixXd X(n, 9);
     for (int i = 0; i < 9; i++)
     {
         if (i == 4) continue;
         auto col = *dframe.ref_cols[i];
         X.col(i - (i > 4)) = Map<VectorXd>(col.data(), n);
     }
+    X.col(8) = VectorXd(n, 1);
     return {X, y};
 }
 
