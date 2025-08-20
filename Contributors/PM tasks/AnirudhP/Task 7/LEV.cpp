@@ -27,4 +27,5 @@ VectorXd LEV(MatrixXd X, VectorXd y, int k)
     }
 
     return (X.transpose()*wt.asDiagonal()*X).ldlt().solve((X.transpose()*wt.asDiagonal()*y));
+
 }
