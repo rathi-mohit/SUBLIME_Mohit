@@ -56,7 +56,7 @@ pair<MatrixXd, VectorXd> k_selection(const MatrixXd &X, const VectorXd &y, int k
         }
     }
 
-    k = selected.size();
+    k = count(selected.begin(), selected.end(), true);
 
     MatrixXd X_iboss(k, p);
     VectorXd y_iboss(k);
