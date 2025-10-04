@@ -7,7 +7,7 @@ using namespace Eigen;
 VectorXd LEV(MatrixXd X, VectorXd y, int k)
 {
     
-    vector<double> pi(X.rows());
+    vector<double> pi(X.rows())Q;
     VectorXd wt=VectorXd::Zero(X.rows());
     MatrixXd calc_temp=(X.transpose()*X).ldlt().solve(MatrixXd::Identity(X.cols(), X.cols()));
     for(int i=0; i<X.rows(); i++)

@@ -39,16 +39,18 @@ public:
         vector<bool> selected(N, false);
         
         #pragma omp parallel for schedule(dynamic)
-        for (int j = has_intercept ? 1 : 0; j < p; ++j) {
-            vector<pair<double, int>> column_values;
-            column_values.reserve(N);
+        for (int j = has_intercept ? 1 : 0; j < p; ++j)
+        {
+            // vector<pair<double, int>> column_values;
+            // column_values.reserve(N);
             
-            for (int i = 0; i < N; ++i) {
+            for (int i = 0; i < N; ++i)
+            {
                 column_values.emplace_back(X(i, j), i);
             }
             
             // Bottom r
-            nth_element(column_values.begin(), column_values.begin() + r - 1, column_values.end());
+            nth_element(V.data(), column_values.begin() + r - 1, column_values.end());
                        
             // Top r
             nth_element(column_values.begin() + r, column_values.end() - r, column_values.end());

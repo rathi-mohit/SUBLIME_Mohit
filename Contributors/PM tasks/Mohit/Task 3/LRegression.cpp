@@ -379,7 +379,7 @@ pair<vector<int>, vector<double>> forward_selection(const MatrixXd &X_full, cons
     
     return make_pair(selected_order, AIC_in_same_order);
 }
-ModelMetrics compute_metrics(const MatrixXd &X, const VectorXd &y, const VectorXd &beta, double sigma2_full_model) {
+ModelMetrics compute_metrics(const MatrixXd &X, const VectorXd &y, const VectorXd & beta, double sigma2_full_model) {
     int N = X.rows();
     int p = X.cols(); 
 
