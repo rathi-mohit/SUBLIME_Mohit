@@ -8,10 +8,8 @@
 #include <random>
 #include <fstream>
 #include <omp.h>
-
 #include "regression_metrics.hpp"
 #include "headerlasso.hpp"
-
 using namespace std;
 using namespace Eigen;
 
@@ -50,58 +48,52 @@ void dividing_data_for_cv(const MatrixXd& X, const VectorXd& y, int k, vector<Ma
             count++;
         }
     }
-
 }
 
-void coord_descent(const MatrixXd& X, double lambda, VectorXd& b, int k, VectorXd& r, double ss)
+void coord_descent(const MatrixXd&X, double lambda, VectorXd& b, int k,const VectorXd& r, double ss)
 {
-    // Remove the effect of the current coefficient from the residual
-    r += X.col(k) * b(k);
+    double m=X.col(k).dot(r)+ss*b(k);
 
-    // Compute the partial residual
-    double m = X.col(k).dot(r) / X.rows();
-
-    // Soft-thresholding for Lasso
-    if (m > lambda / 2)
+    if(m>lambda)
     {
-        b(k) = (m - lambda / 2) / (ss / X.rows());
+       b(k)=(m-lambda)/ss;
     }
-    else if (m < -lambda / 2)
+    else if(m<-lambda)
     {
-        b(k) = (m + lambda / 2) / (ss / X.rows());
+       b(k)=(m+lambda)/ss;
     }
     else
     {
-        // No update needed if within threshold
+        b(k)=0;
     }
-    // Update the residual after changing b(k)
-    r -= X.col(k) * b(k);
 }
-VectorXd lasso(const MatrixXd& X, const VectorXd& y, double lambda, int maxiter, double tol, int miniter)
+
+
+VectorXd lasso(const MatrixXd&X, const VectorXd&y, double lambda, int maxiter, double tol, int miniter)
 {
     if (X.rows() != y.size()) throw invalid_argument("Number of rows in X must match size of y.");
-    if (lambda < 0) throw invalid_argument("Lambda should be greater than 0.");
+    if (lambda<0) throw invalid_argument("Lambda should be greater than 0.");
+    
+    VectorXd b=VectorXd::Zero(X.cols());
+    VectorXd b_old=VectorXd::Ones(X.cols());
+    b(0)=y.mean();
+    b_old(0)=b(0);
+    int f=0;
 
-    VectorXd b = VectorXd::Zero(X.cols());
-    VectorXd b_old = VectorXd::Ones(X.cols());
-    b(0) = y.mean();
-    b_old(0) = b(0);
-    int f = 0;
+    VectorXd r=y-X*b;
 
-    VectorXd r = y - X * b;
-
-    // storing all column norms (squared) in a vector so that we don't calculate it each time.
-    VectorXd ss = X.colwise().squaredNorm();
-    while (((b - b_old).lpNorm<Infinity>() / max(b.lpNorm<Infinity>(), 1.0) > tol && f < maxiter) || (f < miniter))
+    //storing all column norms (squared) in a vector so that we don't calculate it each time.
+    VectorXd ss=X.colwise().squaredNorm(); 
+    while(((b-b_old).lpNorm<Infinity>()/max(b.lpNorm<Infinity>(),1.0)>tol&&f<maxiter)||(f<miniter))
     {
-        b_old = b;
-        for (int i = 1; i < X.cols(); i++)
+        b_old=b;
+        for(int i=1; i<X.cols(); i++)
         {
-            coord_descent(X, lambda, b, i, r, ss(i));
-            // r = y - Xb, b has changed, so we update r to reflect the change
-            r -= (b(i) - b_old(i)) * X.col(i);
+            coord_descent(X, lambda, b, i, r, ss(i)); 
+            //r=y-Xb, b has changed, so we update r to reflect the change
+            r-=(b(i)-b_old(i))*X.col(i);
         }
-        f = f + 1;
+        f=f+1;
     }
     return b;
 }
@@ -122,6 +114,7 @@ VectorXd kfold_cv_lassomain(const MatrixXd& X_inp, const VectorXd& y, int k, dou
 
     MatrixXd X=X_inp;
     VectorXd stddev_forrescaling(X.cols());
+    X.col(0)=VectorXd::Zero(X.rows());
     for(int i=1; i<X.cols(); i++)
     {
         double x_mean=X.col(i).mean();
@@ -146,23 +139,19 @@ VectorXd kfold_cv_lassomain(const MatrixXd& X_inp, const VectorXd& y, int k, dou
     vector<VectorXd> Y_test(k);
     vector<MatrixXd> X_test(k);
 
-    VectorXd b(X.cols());
     dividing_data_for_cv(X,y,k,X_tra,X_test,Y_tra,Y_test);
 
     for(float i=lb; i<=ub; i=i+stepsize) //log scale for lambda
     {
-       cout<<i<<endl;
-       double MSE = 0.0;
+       MSE=0;
+       #pragma omp parallel for reduction(+:MSE)
+       for(int j=0; j<k; j++)
+       {
+          VectorXd b=lasso(X_tra[j], Y_tra[j], l, maxiter, tol, miniter); //training the model
+          MSE+=(Y_test[j]-X_test[j]*b).squaredNorm()/s; //testing the model
+       }
+       MSE=MSE/k; //cross-validation error.
 
-        #pragma omp parallel for reduction(+:MSE)
-        for (int j = 0; j < k; j++) {
-            auto b = lasso(X_tra[j], Y_tra[j], l, maxiter, tol, miniter);
-            VectorXd pred = X_test[j] * b;
-            VectorXd diff = Y_test[j] - pred;
-            MSE += diff.squaredNorm() / s;
-        }
-
-        MSE /= k;
        //minimum cross validation error
 
        if(MSE<MSE_min)
@@ -183,18 +172,21 @@ VectorXd kfold_cv_lassomain(const MatrixXd& X_inp, const VectorXd& y, int k, dou
        l=l*mult;
     }
 
+    VectorXd b_lasso=lasso(X, y, lambda, maxiter, tol, miniter);
+
     for(int i=1; i<X.cols(); i++) //rescaling
     {
         if(stddev_forrescaling(i)!=0)
         {
-           b(i)=b(i)/stddev_forrescaling(i);
+           b_lasso(i)=b_lasso(i)/stddev_forrescaling(i);
         }
-        b(0)-=X_inp.col(i).mean()*b(i);
+        b_lasso(0)-=X_inp.col(i).mean()*b_lasso(i);
     }
 
-    b=lasso(X, y, lambda, maxiter, tol, miniter);
+    
     cout<<lambda<<endl;
-    return b;
+
+    return b_lasso;
 }
 
 VectorXd kfold_cvlasso(const MatrixXd& X, const VectorXd& y, int k)
@@ -208,3 +200,4 @@ VectorXd kfold_cvlasso(const MatrixXd& X, const VectorXd& y, int k)
     double miniter=30;
     return kfold_cv_lassomain(X, y, k, lb, ub, stepsize, nochange, maxiter, tol, miniter);
 }
+
