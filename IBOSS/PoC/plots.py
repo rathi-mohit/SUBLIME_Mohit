@@ -1,60 +1,63 @@
 import pandas as pd
-import matplotlib.pyplot as plt
 import numpy as np
-import os
+import matplotlib.pyplot as plt
+from scipy.spatial import cKDTree
 
-def plot_data():
-    """Reads CSVs and generates the requested plots."""
-    try:
-        # Load the data from the user-provided CSV files
-        df_full = pd.read_csv('input.csv')        # Change filename to your filename
-        df_selected = pd.read_csv('output.csv')   # Change filename to your filename
-    except FileNotFoundError:
-        print("Error: One or both CSV files not found. Please ensure they are in the same directory.")
-        return
-    except Exception as e:
-        print(f"An error occurred while reading the CSV files: {e}")
-        return
+# --- LOAD YOUR DATA HERE ---
+df_original = pd.read_csv('https://raw.githubusercontent.com/rathi-mohit/SUBLIME_Mohit/refs/heads/main/IBOSS/PoC/Gen/input.csv')
+df_selected = pd.read_csv('https://raw.githubusercontent.com/rathi-mohit/SUBLIME_Mohit/refs/heads/main/IBOSS/PoC/Gen/output.csv')
 
-    # Clean column names by stripping whitespace
-    df_full.columns = df_full.columns.str.strip()
-    df_selected.columns = df_selected.columns.str.strip()
+def get_matched_data(original, selected, tolerance=1e-4):
+    """
+    Finds the corresponding points in 'original' for each point in 'selected'
+    using nearest neighbor search to handle precision issues.
+    """
+    # Build a KDTree for efficient spatial searching
+    tree = cKDTree(original[['X1', 'X2']].values)
     
-    # Check if the required columns exist after cleaning
-    if 'X1' not in df_full.columns or 'X2' not in df_full.columns:
-        print("Error: Required columns 'X1' or 'X2' not found in normal_data.csv after cleaning.")
-        return
-    if 'X1' not in df_selected.columns or 'X2' not in df_selected.columns:
-        print("Error: Required columns 'X1' or 'X2' not found in output.csv after cleaning.")
-        return
+    # Query the tree to find the nearest original point for every selected point
+    # distances: distance to the nearest neighbor
+    # idxs: the index of that neighbor in the original dataframe
+    distances, idxs = tree.query(selected[['X1', 'X2']].values)
+    
+    # Optional: Filter out matches that are too far away (sanity check)
+    valid_mask = distances < tolerance
+    matched_indices = idxs[valid_mask]
+    
+    if len(matched_indices) < len(selected):
+        print(f"Warning: {len(selected) - len(matched_indices)} points could not be matched within tolerance.")
+        
+    return original.iloc[matched_indices]
 
-    # Truncate the data to 4 decimal places for accurate comparison
-    df_full['X1'] = np.trunc(df_full['X1'] * 10000) / 10000
-    df_full['X2'] = np.trunc(df_full['X2'] * 10000) / 10000
-    df_selected['X1'] = np.trunc(df_selected['X1'] * 10000) / 10000
-    df_selected['X2'] = np.trunc(df_selected['X2'] * 10000) / 10000
+# Get the "clean" coordinates from the original set that match the "noisy" selected set
+matched_subset = get_matched_data(df_original, df_selected)
 
-    # Create a figure and a set of subplots for the new plots (2 rows, 1 column)
-    fig, axes = plt.subplots(2, 1, figsize=(8, 12))
-    fig.suptitle('X1 vs X2 Plots', fontsize=16)
+# --- PLOTTING ---
+plt.figure(figsize=(10, 8))
 
-    # Plot 1: X1 vs X2 for all data
-    axes[0].scatter(df_full['X1'], df_full['X2'], c='blue', alpha=0.6)
-    axes[0].set_title('Plot of X1 vs X2 (All Data)')
-    axes[0].set_xlabel('X1')
-    axes[0].set_ylabel('X2')
-    axes[0].grid(False) # Grid removed
+# 1. Scatter the Original Data (Background)
+plt.scatter(df_original['X1'], df_original['X2'], 
+            c='gray', alpha=0.5, s=20, label='Original Data')
 
-    # Plot 2: X1 vs X2 for selected data
-    axes[1].scatter(df_selected['X1'], df_selected['X2'], c='orange', s=100, edgecolors='black', alpha=0.8)
-    axes[1].set_title('Plot of X1 vs X2 (Selected Data)')
-    axes[1].set_xlabel('X1')
-    axes[1].set_ylabel('X2')
-    axes[1].grid(False) # Grid removed
+# 2. Highlight the Selected Data
+# specific trick: we plot the MATCHED coordinates, not the raw selected ones.
+# This ensures the box is perfectly centered on the background dot.
+plt.scatter(matched_subset['X1'], matched_subset['X2'], 
+            facecolors='none',    # No fill (transparent center)
+            edgecolors='red',     # Red border
+            marker='s',           # Square shape
+            s=150,                # Size of the box
+            linewidth=2, 
+            alpha=0.7, 
+            label='Selected (Highlighted)')
 
-    plt.tight_layout(rect=[0, 0, 1, 0.96])
-    plt.show()
+plt.title('X1 vs X2: Robust Highlighting of Selected Data')
+plt.xlabel('X1')
+plt.ylabel('X2')
+plt.legend()
+plt.grid(True, linestyle='--', alpha=0.6)
 
-# Run the plotting function
-if __name__ == "__main__":
-    plot_data()
+# Save or show
+plt.savefig('highlighted_plot.png')
+plt.show()
+print(matched_subset.tail)

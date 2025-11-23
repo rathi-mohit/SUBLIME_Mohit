@@ -27,6 +27,5 @@ int main() {
 
     chrono::duration<double> duration = end - start;
     cout << "Time taken: " << duration.count() << '\n';
-    return 0;
-    
+    return 0;    
 }   

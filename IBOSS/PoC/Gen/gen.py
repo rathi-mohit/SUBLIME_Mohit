@@ -3,7 +3,7 @@
 import pandas as pd
 import numpy as np
 
-N = 1000         # Define the number of datapoints here
+N = 10000         # Define the number of datapoints here
 output_file = "input.csv"
 
 mu_x1, sigma_x1 = 0, 1     # X1: Mean = 0, Std Dev = 1
