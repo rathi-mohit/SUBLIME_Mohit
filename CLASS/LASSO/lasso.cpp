@@ -114,7 +114,7 @@ VectorXd kfold_cv_lassomain(const MatrixXd& X_inp, const VectorXd& y, int k, dou
 
     MatrixXd X=X_inp;
     VectorXd stddev_forrescaling(X.cols());
-    X.col(0)=VectorXd::Zero(X.rows());
+    X.col(0)=VectorXd::Ones(X.rows());
     for(int i=1; i<X.cols(); i++)
     {
         double x_mean=X.col(i).mean();
@@ -200,4 +200,5 @@ VectorXd kfold_cvlasso(const MatrixXd& X, const VectorXd& y, int k)
     double miniter=30;
     return kfold_cv_lassomain(X, y, k, lb, ub, stepsize, nochange, maxiter, tol, miniter);
 }
+
 
