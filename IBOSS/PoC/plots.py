@@ -1,60 +1,44 @@
 import pandas as pd
 import matplotlib.pyplot as plt
-import numpy as np
-import os
+from scipy.spatial import cKDTree
 
-def plot_data():
-    """Reads CSVs and generates the requested plots."""
-    try:
-        # Load the data from the user-provided CSV files
-        df_full = pd.read_csv('input.csv')        # Change filename to your filename
-        df_selected = pd.read_csv('output.csv')   # Change filename to your filename
-    except FileNotFoundError:
-        print("Error: One or both CSV files not found. Please ensure they are in the same directory.")
-        return
-    except Exception as e:
-        print(f"An error occurred while reading the CSV files: {e}")
-        return
+df_orig = pd.read_csv('https://raw.githubusercontent.com/rathi-mohit/SUBLIME_Mohit/refs/heads/main/IBOSS/PoC/Gen/input1k.csv')
+df_sel = pd.read_csv('https://raw.githubusercontent.com/rathi-mohit/SUBLIME_Mohit/refs/heads/main/IBOSS/PoC/Gen/output1k.csv')
 
-    # Clean column names by stripping whitespace
-    df_full.columns = df_full.columns.str.strip()
-    df_selected.columns = df_selected.columns.str.strip()
+def get_matched_data(original, selected, tolerance=1e-4):
+    tree = cKDTree(original[['X1', 'X2']].values)
+    distances, idxs = tree.query(selected[['X1', 'X2']].values)
     
-    # Check if the required columns exist after cleaning
-    if 'X1' not in df_full.columns or 'X2' not in df_full.columns:
-        print("Error: Required columns 'X1' or 'X2' not found in normal_data.csv after cleaning.")
-        return
-    if 'X1' not in df_selected.columns or 'X2' not in df_selected.columns:
-        print("Error: Required columns 'X1' or 'X2' not found in output.csv after cleaning.")
-        return
+    valid_mask = distances < tolerance
+    matched_indices = idxs[valid_mask]
+    
+    if len(matched_indices) < len(selected):
+        print(f"Warning: {len(selected) - len(matched_indices)} points dropped due to tolerance.")
+        
+    return original.iloc[matched_indices]
 
-    # Truncate the data to 4 decimal places for accurate comparison
-    df_full['X1'] = np.trunc(df_full['X1'] * 10000) / 10000
-    df_full['X2'] = np.trunc(df_full['X2'] * 10000) / 10000
-    df_selected['X1'] = np.trunc(df_selected['X1'] * 10000) / 10000
-    df_selected['X2'] = np.trunc(df_selected['X2'] * 10000) / 10000
+matched_subset = get_matched_data(df_orig, df_sel)
 
-    # Create a figure and a set of subplots for the new plots (2 rows, 1 column)
-    fig, axes = plt.subplots(2, 1, figsize=(8, 12))
-    fig.suptitle('X1 vs X2 Plots', fontsize=16)
+plt.figure(figsize=(10, 8))
 
-    # Plot 1: X1 vs X2 for all data
-    axes[0].scatter(df_full['X1'], df_full['X2'], c='blue', alpha=0.6)
-    axes[0].set_title('Plot of X1 vs X2 (All Data)')
-    axes[0].set_xlabel('X1')
-    axes[0].set_ylabel('X2')
-    axes[0].grid(False) # Grid removed
+plt.scatter(df_orig['X1'], df_orig['X2'], c='gray', alpha=0.5, s=20, label='Original Data')
 
-    # Plot 2: X1 vs X2 for selected data
-    axes[1].scatter(df_selected['X1'], df_selected['X2'], c='orange', s=100, edgecolors='black', alpha=0.8)
-    axes[1].set_title('Plot of X1 vs X2 (Selected Data)')
-    axes[1].set_xlabel('X1')
-    axes[1].set_ylabel('X2')
-    axes[1].grid(False) # Grid removed
+plt.scatter(matched_subset['X1'], matched_subset['X2'], 
+            facecolors='none', 
+            edgecolors='red', 
+            marker='s', 
+            s=150, 
+            linewidth=2, 
+            alpha=0.7, 
+            label='Selected')
 
-    plt.tight_layout(rect=[0, 0, 1, 0.96])
-    plt.show()
+plt.title('X1 vs X2 Distribution')
+plt.xlabel('X1')
+plt.ylabel('X2')
+plt.legend()
+plt.grid(True, linestyle='--', alpha=0.6)
 
-# Run the plotting function
-if __name__ == "__main__":
-    plot_data()
+plt.savefig('highlighted_plot.png')
+plt.show()
+
+print(matched_subset.tail())
