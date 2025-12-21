@@ -45,35 +45,12 @@ void multiply(double *y, int n)
 
 }
 
-//redundant, just in case
-void padwithzeroes(MatrixXd& X, VectorXd& y)
-{
-    int n=X.rows();
-    int q=(int)pow(2,ceil(log2(n)));
-
-    if(q==n)
-    {
-        return;
-    }
-    
-    else
-    {
-        X.conservativeResize(q,X.cols());
-        y.conservativeResize(q);
-
-        X.bottomRows(q-n).setZero();
-        y.tail(q-n).setZero();
-    }
-}
-
-VectorXd SRHT(const MatrixXd& A,const VectorXd& b, int r)
+VectorXd SRHT(const MatrixXd& A,const VectorXd& b, const int& r)
 {
     //I do not multiply by the constant factor sqrt(n/r) since it gets cancelled in the end.
     int n=A.rows();
     int d=A.cols();
     unsigned int n_padded=bit_ceil((unsigned)n);
-    //int r = ceil(max(48*48*d*log(40*n*d)*log(100*100*d*log(40*n*d)),40*d*log(40*n*d)/e));
-    //int r=(int)(d*log(n));
 
     random_device rd;
     mt19937 mt(rd());
@@ -93,7 +70,6 @@ VectorXd SRHT(const MatrixXd& A,const VectorXd& b, int r)
 
     diagonal.array()=2*diagonal.array()-1;
 
-    //processing target vector
     VectorXd temp_b=VectorXd::Zero(n_padded);
     temp_b.head(n)=b;
     temp_b.head(n).array() *= diagonal.array();
@@ -105,7 +81,6 @@ VectorXd SRHT(const MatrixXd& A,const VectorXd& b, int r)
         y_f(i)=temp_b(S[i]);
     }
 
-    //processing the data
     MatrixXd X_f(r,d);
     #pragma omp parallel
     {
@@ -114,8 +89,6 @@ VectorXd SRHT(const MatrixXd& A,const VectorXd& b, int r)
     for(int j=0; j<d; j++)
     {
         temp.tail(n_padded-n).setZero();
-        //temp.head(n).array() = A.col(j).array() * diagonal.head(n).array();
-        //temp.tail(n_padded-n).setZero();
         const double* col_ptr = &A(0, j);
         double* temp_ptr = temp.data();
         const double* diag_ptr = diagonal.data();
