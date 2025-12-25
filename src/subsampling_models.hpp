@@ -6,7 +6,7 @@
 using namespace std;
 using namespace Eigen;
 
-VectorXd LEV(MatrixXd X, VectorXd y, int k)
+inline VectorXd LEV(MatrixXd X, VectorXd y, int k)
 {
     
     vector<double> pi(X.rows());
@@ -33,7 +33,7 @@ VectorXd LEV(MatrixXd X, VectorXd y, int k)
 }
 
 // Function to create indicator vector eta_L for sampled indices
-VectorXi sampleIndicator(int n, int sample_size, bool withReplacement = true) {
+inline VectorXi sampleIndicator(int n, int sample_size, bool withReplacement = true) {
     VectorXi eta = VectorXi::Zero(n);
 
     std::random_device rd;
@@ -59,7 +59,7 @@ VectorXi sampleIndicator(int n, int sample_size, bool withReplacement = true) {
 }
 
 // Subsampling-based BLUE estimator
-VectorXf subsampleEstimator(const MatrixXf &X, const VectorXf &y, 
+inline VectorXf subsampleEstimator(const MatrixXf &X, const VectorXf &y, 
                             const VectorXi &eta) {
     int n = X.rows();
     int p = X.cols();
