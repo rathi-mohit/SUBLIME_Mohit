@@ -1,0 +1,67 @@
+# Introduction
+Sublime is an R library which aims at implementing subsampling methods in order to reduce the time taken to perform least squares in the case of large data. Currently, IBOSS and CLASS have been implemented
+
+# Using IBOSS
+
+## 1. Load the Rcpp library
+install.packages("RcppEigen") \
+library(Rcpp)
+
+## 2. Compile and source the C++ function
+Make sure the C++ file is in the correct location \
+sourceCpp("C:/testEigen/IBOSSWRAPPER.cpp") 
+
+## 3. Read data from the CSV file
+csv_file_path <- "path/to/your/data.csv" \
+full_data <- read.csv(csv_file_path, header = FALSE)
+
+## 4. Parse and prepare the data for the C++ function
+This script assumes the LAST column is 'y' and all others are 'X' \
+num_cols <- ncol(full_data)
+
+
+Extract predictor columns and convert to a numeric matrix \
+X_from_csv <- as.matrix(full_data[, 1:(num_cols - 1)])
+
+
+Add an intercept column (a column of all ones) to the X matrix \
+X <- cbind(1, X_from_csv)
+
+
+Extract the last column as the response vector 'y' \
+y <- full_data[, num_cols]
+
+
+cat("--- Data Loaded ---\n") \
+cat("Read", nrow(X), "rows and", ncol(X), "predictor columns (including intercept) from CSV.\n\n")
+
+
+## 5. Set the target number of points and run the selection function
+k_target <- 100 # You can adjust this value \
+selected_data <- k_selection(X, y, k_target)
+
+## 6. Inspect the results of the selection
+cat("--- Subset Details ---\n") \
+cat("Target k:", k_target, "\n") \
+cat("Actual selected rows:", nrow(selected_data$X_selected), "\n\n")
+
+## 7. Fit a model on the subset and evaluate performance
+cat("--- Model Performance on Subset ---\n")
+
+
+X_sub <- selected_data$X_selected \
+y_sub <- selected_data$y_selected
+
+
+Fit a linear model. Use "- 1" because X_sub already has an intercept column. \
+model <- lm(y_sub ~ X_sub - 1)
+
+
+Calculate Mean Squared Error (MSE) \
+mse <- mean(residuals(model)^2) \
+cat("Mean Squared Error (MSE):", mse, "\n")
+
+
+Get the R-squared value from the model summary \
+r_squared <- summary(model)$r.squared \
+cat("R-squared:", r_squared, "\n")
