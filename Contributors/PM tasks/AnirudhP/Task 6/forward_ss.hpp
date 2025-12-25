@@ -10,20 +10,17 @@
 using namespace std;
 using namespace Eigen;
 
-namespace
+void display(string a, double para_min, int para_minpos,const vector<VectorXd>& M,const vector<vector<int>>& M_list)
 {
-    void display(string a, double para_min, int para_minpos,const vector<VectorXd>& M,const vector<vector<int>>& M_list)
-    {
-        cout<<a<<para_min<<" No of parameters: "<<(para_minpos+1)<<endl;
-        cout<<"Estimators: \n"<<M[para_minpos]<<endl;
+    cout<<a<<para_min<<" No of parameters: "<<(para_minpos+1)<<endl;
+    cout<<"Estimators: \n"<<M[para_minpos]<<endl;
 
-        cout<<"Parameters chosen: "<<endl;
-        for(int i=0; i<M_list[para_minpos].size()-1; i++)
-        {
+    cout<<"Parameters chosen: "<<endl;
+    for(int i=0; i<M_list[para_minpos].size()-1; i++)
+    {
         cout<<M_list[para_minpos][i]<<", ";
-        }
-        cout<<M_list[para_minpos][M_list[para_minpos].size()-1]<<endl;   
     }
+    cout<<M_list[para_minpos][M_list[para_minpos].size()-1]<<endl;   
 }
 
 void forwardsubsetselection(const MatrixXd& X,const VectorXd& y)
