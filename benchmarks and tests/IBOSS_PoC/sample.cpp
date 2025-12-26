@@ -1,9 +1,9 @@
 #include <bits/stdc++.h>
 #include <Eigen/Dense>
-#include "./lib/utils.hpp"
-#include "./lib/regression_models.hpp"
+#include "../../src/lib/utils.hpp"
+#include "../../src/lib/regression_models.hpp"
 
-#include "iboss.hpp"
+#include "../../src/IBOSS/iboss.hpp"
 
 using namespace Eigen;
 using namespace std;

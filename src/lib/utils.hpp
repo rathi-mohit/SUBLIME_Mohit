@@ -13,7 +13,7 @@
 using namespace std;
 using namespace Eigen;
 
-vector<vector<string>> load_csv(const string &filename, const bool &header = true, const char separator = ',') {
+inline vector<vector<string>> load_csv(const string &filename, const bool &header = true, const char separator = ',') {
     vector<string> lines;
 
     ifstream file(filename);
@@ -40,7 +40,7 @@ vector<vector<string>> load_csv(const string &filename, const bool &header = tru
 
     return data;
 }
-vector<size_t> numerical_indices(vector<vector<string>> &data) {
+inline vector<size_t> numerical_indices(vector<vector<string>> &data) {
     vector<size_t> indices;
     for (size_t i = 0; i < data[0].size(); ++i) {
         try {
@@ -52,7 +52,7 @@ vector<size_t> numerical_indices(vector<vector<string>> &data) {
     }
     return indices;
 }
-MatrixXd convert_to_matrix(vector<vector<string>> &data, vector<size_t> &indices) {
+inline MatrixXd convert_to_matrix(vector<vector<string>> &data, vector<size_t> &indices) {
     vector<vector<double>> numerical_data;
     
     for (size_t i = 0; i < data.size(); ++i) {
@@ -75,7 +75,7 @@ MatrixXd convert_to_matrix(vector<vector<string>> &data, vector<size_t> &indices
     return X;
 }   
 
-MatrixXd cleaned_convert_to_matrix(const vector<vector<string>> &data, const vector<size_t> &indices) {
+inline MatrixXd cleaned_convert_to_matrix(const vector<vector<string>> &data, const vector<size_t> &indices) {
     size_t rows = data.size();
     size_t cols = indices.size();
     MatrixXd X(rows, cols);
@@ -91,7 +91,7 @@ MatrixXd cleaned_convert_to_matrix(const vector<vector<string>> &data, const vec
     return X;
 }
 
-MatrixXd clean_numerical_load_csv(const string filename, const bool header = true, const char separator = ',') {
+inline MatrixXd clean_numerical_load_csv(const string filename, const bool header = true, const char separator = ',') {
     vector<string> lines;
 
     ifstream file(filename);
@@ -128,7 +128,7 @@ MatrixXd clean_numerical_load_csv(const string filename, const bool header = tru
     return data;
 }
 
-MatrixXd cvt2MatrixXd(ifstream &file, size_t n_lines, const bool header = true, const char separator = ',') {
+inline MatrixXd cvt2MatrixXd(ifstream &file, size_t n_lines, const bool header = true, const char separator = ',') {
     vector<string> lines;
 
     string line;
@@ -165,7 +165,7 @@ MatrixXd cvt2MatrixXd(ifstream &file, size_t n_lines, const bool header = true, 
     return data;
 }
 
-void standardize(MatrixXd &X, bool intercept = true) {
+inline void standardize(MatrixXd &X, bool intercept = true) {
     
     if (intercept) {
         #pragma omp parallel for schedule(dynamic)
@@ -209,7 +209,7 @@ void standardize(MatrixXd &X, bool intercept = true) {
     // }
 }
 
-double cross_validation(const MatrixXd &X_given, const VectorXd &y_given, int k) {
+inline double cross_validation(const MatrixXd &X_given, const VectorXd &y_given, int k) {
     size_t n = X_given.rows();
     size_t fold_size = n / k;
     n = k * fold_size;

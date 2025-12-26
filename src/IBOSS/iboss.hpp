@@ -20,7 +20,7 @@ using namespace std;
  *  */ 
 
 
-pair<MatrixXd, VectorXd> k_selection(const MatrixXd &X, const VectorXd &y, size_t k) {
+inline pair<MatrixXd, VectorXd> k_selection(const MatrixXd &X, const VectorXd &y, size_t k) {
 
     const size_t p = X.cols();
     const size_t N = X.rows();

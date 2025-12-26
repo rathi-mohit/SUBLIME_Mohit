@@ -3,13 +3,12 @@
 #include <ctime>
 #include <chrono>
 
-#include "regression_metrics.hpp"
-#include "headerlasso.hpp"
-#include "lasso.cpp"
+#include "../../src/lib/regression_metrics.hpp"
+#include "../../src/CLASS/lasso.hpp"
 
 int main()
 {
-    ifstream file("chem_data.csv");
+    ifstream file("../chem_data.csv");
     string a;
     // Use number of rows and columns of your dataset here.
     MatrixXd X(13910,281);
