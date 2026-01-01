@@ -1,3 +1,7 @@
 # testing folder
 test/
 other_Resources/
+.vscode/
+dev/
+.Rproj.user
+SUBLIME/
