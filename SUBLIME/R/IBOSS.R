@@ -10,9 +10,6 @@
 #' @param intercept Logical; whether first column is intercept.
 #'
 #'
-#' @useDynLib YOUR_PACKAGE_NAME, .registration = TRUE
-#' @importFrom Rcpp sourceCpp
-#'
 #' @return A list with:
 #' \itemize{
 #'   \item X_selected: Numeric matrix of subset data
